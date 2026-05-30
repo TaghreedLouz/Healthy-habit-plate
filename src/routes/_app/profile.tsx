@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useStore, store, calcTargets, logout } from "@/lib/store";
+import { useStore, store, calcTargets, clearLocalProfile } from "@/lib/store";
+import { signOut } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,7 @@ function ProfilePage() {
       <Card className="rounded-3xl">
         <CardContent className="grid gap-4 p-6 sm:grid-cols-2">
           <div><Label>Name</Label><Input value={user.name} onChange={(e)=>save({name:e.target.value})}/></div>
-          <div><Label>Email</Label><Input value={user.email} onChange={(e)=>save({email:e.target.value})}/></div>
+          <div><Label>Email</Label><Input value={user.email} readOnly className="bg-muted/50"/></div>
           <div><Label>Age</Label><Input type="number" value={user.age} onChange={(e)=>save({age:+e.target.value})}/></div>
           <div>
             <Label>Gender</Label>
@@ -81,7 +82,11 @@ function ProfilePage() {
 
       <div className="flex justify-between">
         <Button onClick={() => toast.success("Profile saved")}>Save changes</Button>
-        <Button variant="outline" onClick={() => { logout(); router.navigate({ to: "/login" }); }}>Log out</Button>
+        <Button variant="outline" onClick={async () => {
+          await signOut();
+          clearLocalProfile();
+          router.navigate({ to: "/login" });
+        }}>Log out</Button>
       </div>
     </div>
   );
