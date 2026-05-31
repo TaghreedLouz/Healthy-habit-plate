@@ -19,13 +19,10 @@ service cloud.firestore {
 
     match /settings/stats {
       allow read: if true;
-      allow create: if signedIn()
+      allow create, update: if signedIn()
         && request.resource.data.keys().hasOnly(["registeredUsers"])
-        && request.resource.data.registeredUsers == 1;
-      allow update: if signedIn()
-        && request.resource.data.keys().hasOnly(["registeredUsers"])
-        && request.resource.data.registeredUsers == resource.data.registeredUsers + 1
-        && !exists(/databases/$(database)/documents/users/$(request.auth.uid));
+        && request.resource.data.registeredUsers is int
+        && request.resource.data.registeredUsers >= 0;
     }
 
     match /settings/{settingId} {

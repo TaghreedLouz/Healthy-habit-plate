@@ -4,7 +4,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -77,15 +76,17 @@ export async function syncUserRecord(firebaseUser: User, displayName?: string) {
   };
 
   if (!existing.exists()) {
-    await runTransaction(db, async (transaction) => {
-      const statsSnap = await transaction.get(STATS_REF);
+    await setDoc(ref, payload, { merge: true });
+    try {
+      const statsSnap = await getDoc(STATS_REF);
       const current =
         statsSnap.exists() && typeof statsSnap.data()?.registeredUsers === "number"
           ? statsSnap.data()!.registeredUsers
           : 0;
-      transaction.set(STATS_REF, { registeredUsers: current + 1 }, { merge: true });
-      transaction.set(ref, payload, { merge: true });
-    });
+      await setDoc(STATS_REF, { registeredUsers: current + 1 }, { merge: true });
+    } catch {
+      /* stats counter is optional — do not block signup */
+    }
     return;
   }
 

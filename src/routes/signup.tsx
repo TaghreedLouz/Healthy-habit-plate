@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Leaf } from "lucide-react";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile, signOut } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,6 +65,7 @@ function SignupPage() {
       toast.success("Welcome! Let's set up your plan.");
       await router.navigate({ to: "/onboarding" });
     } catch (error) {
+      await signOut(auth).catch(() => undefined);
       toast.error(formatAuthError(error));
     } finally {
       setLoading(false);
