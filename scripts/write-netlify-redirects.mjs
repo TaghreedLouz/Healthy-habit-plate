@@ -1,11 +1,9 @@
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 
-const root = "dist/_redirects";
-const client = "dist/client/_redirects";
-const rule = "/* /.netlify/functions/server 200\n";
+// publish = "dist" → built assets live under /client/assets/* on disk
+const rules = `/assets/* /client/assets/:splat 200
+/* /.netlify/functions/server 200
+`;
 
-for (const file of [root, client]) {
-  if (!existsSync(file) || readFileSync(file, "utf8").trim().length === 0) {
-    writeFileSync(file, rule);
-  }
-}
+writeFileSync("dist/_redirects", rules);
+writeFileSync("dist/client/_redirects", rules);
