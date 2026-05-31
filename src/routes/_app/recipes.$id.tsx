@@ -1,10 +1,13 @@
-import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { getRecipe } from "@/lib/recipes";
-import { toggleSaved, addMeal, useStore } from "@/lib/store";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useRecipeCatalog } from "@/lib/recipes-catalog";
+import { getAiRecipe } from "@/lib/ai-recipes";
+import { toggleSaved, useStore } from "@/lib/store";
+import { AddRecipeButton } from "@/components/AddRecipeButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bookmark, Plus, ArrowLeft, Clock, Users, Heart } from "lucide-react";
+import { RecipeCardImage } from "@/components/RecipeCardImage";
+import { Bookmark, ArrowLeft, Clock, Users, Heart } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/recipes/$id")({
@@ -13,8 +16,9 @@ export const Route = createFileRoute("/_app/recipes/$id")({
 });
 
 function RecipeDetail() {
-  const { id } = useParams({ from: "/_app/recipes/$id" });
-  const r = getRecipe(id);
+  const { id } = Route.useParams();
+  const { recipes } = useRecipeCatalog();
+  const r = recipes.find((recipe) => recipe.id === id) ?? getAiRecipe(id);
   const saved = useStore((s) => s.saved);
   if (!r) {
     return (
@@ -31,7 +35,7 @@ function RecipeDetail() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="overflow-hidden rounded-3xl border">
-          <img src={r.image} alt={r.name} className="aspect-[4/3] w-full object-cover"/>
+          <RecipeCardImage recipe={r} className="aspect-[4/3] w-full object-cover"/>
         </div>
         <div className="space-y-4">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Best at {r.bestTime}</div>
@@ -51,10 +55,7 @@ function RecipeDetail() {
           </div>
 
           <div className="flex gap-2">
-            <Button className="flex-1 rounded-full" onClick={() => {
-              addMeal({ slot: r.bestTime.toLowerCase() as any, name: r.name, calories: r.calories, protein: r.protein, carbs: r.carbs, fats: r.fats, recipeId: r.id });
-              toast.success("Added to today's meals");
-            }}><Plus className="mr-1 h-4 w-4"/>Add to today</Button>
+            <AddRecipeButton recipe={r} variant="full" label="Add to today" addedLabel="Added" className="flex-1" />
             <Button variant="outline" className="rounded-full" onClick={() => { toggleSaved(r.id); toast.success(isSaved ? "Removed" : "Saved"); }}>
               <Bookmark className={`mr-1 h-4 w-4 ${isSaved ? "fill-primary text-primary" : ""}`}/>
               {isSaved ? "Saved" : "Save"}

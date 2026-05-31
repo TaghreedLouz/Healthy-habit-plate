@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { calcTargets, useStore, updateToday, todayStr } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,10 +12,15 @@ export const Route = createFileRoute("/_app/progress")({
 });
 
 function ProgressPage() {
+  const [chartsReady, setChartsReady] = useState(false);
   const user = useStore((s) => s.user);
   const days = useStore((s) => s.days);
   const meals = useStore((s) => s.meals);
   const targets = calcTargets(user);
+
+  useEffect(() => {
+    setChartsReady(true);
+  }, []);
 
   // last 7 days
   const today = new Date();
@@ -36,6 +42,8 @@ function ProgressPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        {chartsReady ? (
+          <>
         <ChartCard title="Calories this week" target={targets.calories}>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={week}>
@@ -71,6 +79,14 @@ function ProgressPage() {
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
+          </>
+        ) : (
+          <>
+            <ChartCard title="Calories this week" target={targets.calories}><div className="h-[220px]" /></ChartCard>
+            <ChartCard title="Water (cups)" target={targets.water}><div className="h-[220px]" /></ChartCard>
+            <ChartCard title="Steps" target={targets.steps}><div className="h-[220px]" /></ChartCard>
+          </>
+        )}
 
         <Card className="rounded-3xl">
           <CardContent className="p-6">

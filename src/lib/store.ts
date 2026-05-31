@@ -45,16 +45,54 @@ export interface AppState {
   meals: MealEntry[];
   days: DayLog[];
   saved: string[];
+  ingredients: string[];
   reminders: Reminder[];
 }
 
 const KEY = "shp_state_v1";
+const ONBOARDED_KEY = "shp_onboarded_v1";
+
+function loadOnboardedEmails(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(ONBOARDED_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+export function hasCompletedOnboarding(email: string): boolean {
+  return loadOnboardedEmails().has(email.trim().toLowerCase());
+}
+
+export function markOnboardingComplete(email: string) {
+  if (typeof window === "undefined") return;
+  const set = loadOnboardedEmails();
+  set.add(email.trim().toLowerCase());
+  localStorage.setItem(ONBOARDED_KEY, JSON.stringify([...set]));
+}
+
+export function clearOnboardingForEmail(email: string) {
+  if (typeof window === "undefined") return;
+  const normalized = email.trim().toLowerCase();
+  const set = loadOnboardedEmails();
+  set.delete(normalized);
+  localStorage.setItem(ONBOARDED_KEY, JSON.stringify([...set]));
+  store.set((s) =>
+    s.user?.email.toLowerCase() === normalized
+      ? { ...s, user: { ...s.user, onboarded: false } }
+      : s,
+  );
+}
 
 const defaultState: AppState = {
   user: null,
   meals: [],
   days: [],
   saved: [],
+  ingredients: [],
   reminders: [
     { id: "r1", type: "water", time: "09:00", text: "Morning water", enabled: true },
     { id: "r2", type: "water", time: "14:00", text: "Hydration check", enabled: true },
@@ -68,7 +106,17 @@ function load(): AppState {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return defaultState;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Partial<AppState>;
+    return {
+      ...defaultState,
+      ...parsed,
+      user: parsed.user ?? null,
+      meals: parsed.meals ?? [],
+      days: parsed.days ?? [],
+      saved: parsed.saved ?? [],
+      ingredients: parsed.ingredients ?? [],
+      reminders: parsed.reminders?.length ? parsed.reminders : defaultState.reminders,
+    };
   } catch {
     return defaultState;
   }
@@ -106,15 +154,19 @@ export function useStore<T>(selector: (s: AppState) => T): T {
 
 export const todayStr = () => new Date().toISOString().slice(0, 10);
 
+const defaultDayByDate = new Map<string, DayLog>();
+
 export function getToday(state: AppState): DayLog {
   const d = todayStr();
-  return (
-    state.days.find((x) => x.date === d) ?? {
-      date: d,
-      water: 0,
-      steps: 0,
-    }
-  );
+  const existing = state.days.find((x) => x.date === d);
+  if (existing) return existing;
+
+  let fallback = defaultDayByDate.get(d);
+  if (!fallback) {
+    fallback = { date: d, water: 0, steps: 0 };
+    defaultDayByDate.set(d, fallback);
+  }
+  return fallback;
 }
 
 export function updateToday(patch: Partial<DayLog>) {
@@ -208,27 +260,33 @@ export function clearLocalProfile() {
 }
 
 export function syncProfileFromAuth(email: string, displayName?: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const alreadyOnboarded = hasCompletedOnboarding(normalizedEmail);
+
   store.set((s) => {
-    if (s.user?.email === email) return s;
     const base: UserProfile =
-      s.user ?? {
-        name: displayName ?? "Friend",
-        email,
-        age: 28,
-        gender: "other",
-        height: 170,
-        weight: 70,
-        targetWeight: 68,
-        activity: "moderate",
-        goal: "healthier",
-        onboarded: false,
-      };
+      s.user?.email.toLowerCase() === normalizedEmail
+        ? s.user
+        : {
+            name: displayName ?? "Friend",
+            email: normalizedEmail,
+            age: 28,
+            gender: "other",
+            height: 170,
+            weight: 70,
+            targetWeight: 68,
+            activity: "moderate",
+            goal: "healthier",
+            onboarded: alreadyOnboarded,
+          };
+
     return {
       ...s,
       user: {
         ...base,
-        email,
+        email: normalizedEmail,
         name: displayName ?? base.name,
+        onboarded: alreadyOnboarded || base.onboarded,
       },
     };
   });

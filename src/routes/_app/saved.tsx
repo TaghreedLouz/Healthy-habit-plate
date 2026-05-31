@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useStore } from "@/lib/store";
-import { recipes } from "@/lib/recipes";
-import { RecipeCard } from "./recipes";
+import { useRecipeCatalog } from "@/lib/recipes-catalog";
+import { RecipeCard } from "./recipes.index";
 import { Button } from "@/components/ui/button";
 import { Bookmark } from "lucide-react";
 
@@ -12,6 +12,7 @@ export const Route = createFileRoute("/_app/saved")({
 
 function Saved() {
   const saved = useStore((s) => s.saved);
+  const { recipes } = useRecipeCatalog();
   const list = recipes.filter((r) => saved.includes(r.id));
 
   return (

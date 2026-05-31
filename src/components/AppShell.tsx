@@ -1,14 +1,16 @@
 import { Link, Outlet, useRouter } from "@tanstack/react-router";
 import {
   LayoutDashboard, Carrot, ChefHat, CalendarDays, Flame, Droplet,
-  Footprints, TrendingUp, Bookmark, Bell, User, Mail, LogOut, Leaf, Menu, Shield,
+  Footprints, TrendingUp, Bookmark, Bell, User, Mail, LogOut, Leaf, Menu, Shield, Megaphone,
 } from "lucide-react";
 import { useState } from "react";
 import { useStore, clearLocalProfile } from "@/lib/store";
 import { useAuth, signOut } from "@/lib/auth";
+import { usePlatformSettings } from "@/lib/platform.firestore";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const baseNav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -26,6 +28,12 @@ const baseNav = [
 ];
 const adminItem = { to: "/admin", label: "Admin", icon: Shield };
 
+function isNavActive(path: string, to: string) {
+  if (path === to) return true;
+  if (to === "/dashboard") return false;
+  return path.startsWith(`${to}/`);
+}
+
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const path = useRouter().state.location.pathname;
   const { isAdmin } = useAuth();
@@ -33,7 +41,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-1 p-3">
       {nav.map((n) => {
-        const active = path === n.to;
+        const active = isNavActive(path, n.to);
         const Icon = n.icon;
         return (
           <Link
@@ -46,8 +54,9 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-foreground/70 hover:bg-secondary hover:text-foreground",
             )}
+            aria-current={active ? "page" : undefined}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className={cn("h-4 w-4", active && "text-primary-foreground")} />
             {n.label}
           </Link>
         );
@@ -71,13 +80,18 @@ function Brand() {
 
 export function AppShell() {
   const user = useStore((s) => s.user);
+  const { settings } = usePlatformSettings();
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
   async function handleLogout() {
-    await signOut();
-    clearLocalProfile();
-    router.navigate({ to: "/login" });
+    try {
+      await signOut();
+      clearLocalProfile();
+      await router.navigate({ to: "/login" });
+    } catch {
+      toast.error("Could not log out. Please try again.");
+    }
   }
 
   return (
@@ -114,6 +128,14 @@ export function AppShell() {
       </header>
 
       <main className="lg:pl-64">
+        {settings.announcementEnabled && settings.announcement.trim() && (
+          <div className="border-b bg-primary/10 px-4 py-2.5 text-sm">
+            <div className="mx-auto flex max-w-6xl items-center gap-2 text-foreground/90">
+              <Megaphone className="h-4 w-4 shrink-0 text-primary" />
+              <span>{settings.announcement}</span>
+            </div>
+          </div>
+        )}
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
           <Outlet />
         </div>

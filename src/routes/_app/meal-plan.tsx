@@ -1,10 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { recipes } from "@/lib/recipes";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useRecipeCatalog } from "@/lib/recipes-catalog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { addMeal, calcTargets, useStore } from "@/lib/store";
-import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { calcTargets, useStore } from "@/lib/store";
+import { AddRecipeButton } from "@/components/AddRecipeButton";
 
 export const Route = createFileRoute("/_app/meal-plan")({
   head: () => ({ meta: [{ title: "Meal plan — Smart Healthy Plate" }] }),
@@ -12,15 +11,15 @@ export const Route = createFileRoute("/_app/meal-plan")({
 });
 
 function MealPlan() {
+  const navigate = useNavigate();
   const user = useStore((s) => s.user);
+  const { recipes } = useRecipeCatalog();
   const target = calcTargets(user).calories;
-  const plan = {
-    Breakfast: recipes.find((r) => r.bestTime === "Breakfast")!,
-    Lunch: recipes.find((r) => r.bestTime === "Lunch")!,
-    Dinner: recipes.find((r) => r.bestTime === "Dinner")!,
-    Snack: recipes.find((r) => r.bestTime === "Snack")!,
-  };
-  const total = Object.values(plan).reduce((a, r) => a + r.calories, 0);
+  const slots = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
+  const plan = Object.fromEntries(
+    slots.map((slot) => [slot, recipes.find((r) => r.bestTime === slot) ?? recipes[0]]),
+  ) as Record<(typeof slots)[number], (typeof recipes)[number] | undefined>;
+  const total = Object.values(plan).reduce((a, r) => a + (r?.calories ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -30,7 +29,9 @@ function MealPlan() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        {Object.entries(plan).map(([slot, r]) => (
+        {Object.entries(plan).map(([slot, r]) => {
+          if (!r) return null;
+          return (
           <Card key={slot} className="overflow-hidden rounded-3xl pt-0">
             <div className="aspect-[16/9] overflow-hidden">
               <img src={r.image} alt={r.name} className="h-full w-full object-cover"/>
@@ -45,15 +46,24 @@ function MealPlan() {
               </div>
               <div className="text-sm text-muted-foreground italic">Why: {r.why}</div>
               <div className="flex gap-2">
-                <Link to="/recipes/$id" params={{id:r.id}} className="flex-1"><Button variant="outline" className="w-full rounded-full">View recipe</Button></Link>
-                <Button className="rounded-full" onClick={() => {
-                  addMeal({slot: slot.toLowerCase() as any, name:r.name,calories:r.calories,protein:r.protein,carbs:r.carbs,fats:r.fats,recipeId:r.id});
-                  toast.success(`${slot} added`);
-                }}><Plus className="mr-1 h-4 w-4"/>Add</Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full flex-1 rounded-full"
+                  onClick={() => void navigate({ to: "/recipes/$id", params: { id: r.id } })}
+                >
+                  View recipe
+                </Button>
+                <AddRecipeButton
+                  recipe={r}
+                  slot={slot.toLowerCase() as "breakfast" | "lunch" | "dinner" | "snack"}
+                  variant="full"
+                />
               </div>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

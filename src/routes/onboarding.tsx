@@ -1,34 +1,30 @@
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { store, useStore, calcTargets } from "@/lib/store";
+import { store, useStore, calcTargets, markOnboardingComplete } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { requireAuthSession } from "@/lib/auth-guard";
 import { toast } from "sonner";
 import { Leaf } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding")({
-  beforeLoad: async () => {
-    await requireAuthSession();
-    const onboarded = store.get().user?.onboarded ?? false;
-    if (onboarded) throw redirect({ to: "/dashboard" });
-  },
   head: () => ({ meta: [{ title: "Set up your plan — Smart Healthy Plate" }] }),
   component: Onboard,
 });
 
 function Onboard() {
   const router = useRouter();
-  const { session, loading } = useAuth();
+  const { user: authUser, loading } = useAuth();
   const user = useStore((s) => s.user);
+  const onboarded = useStore((s) => s.user?.onboarded ?? false);
 
   useEffect(() => {
     if (loading) return;
-    if (!session) router.navigate({ to: "/login" });
-  }, [session, loading, router]);
+    if (!authUser) router.navigate({ to: "/login" });
+    else if (onboarded) router.navigate({ to: "/dashboard" });
+  }, [authUser, loading, onboarded, router]);
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
@@ -42,13 +38,15 @@ function Onboard() {
     goal: user?.goal ?? "healthier",
   });
 
-  if (loading || !session) return null;
+  if (loading || !authUser || onboarded) return null;
 
   function finish() {
+    const email = user?.email ?? authUser?.email ?? "";
     store.set((s) => ({
       ...s,
       user: { ...(s.user as NonNullable<typeof s.user>), ...form, onboarded: true },
     }));
+    if (email) markOnboardingComplete(email);
     const t = calcTargets({ ...(user as NonNullable<typeof user>), ...form });
     toast.success(`Plan ready: ${t.calories} kcal · ${t.water} cups · ${t.steps} steps`);
     router.navigate({ to: "/dashboard" });

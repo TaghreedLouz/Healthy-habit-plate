@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useStore, store } from "@/lib/store";
+import { usePlatformSettings } from "@/lib/platform.firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +13,14 @@ export const Route = createFileRoute("/_app/ingredients")({
   component: IngredientsPage,
 });
 
-const common = ["Chicken","Rice","Eggs","Cucumber","Yogurt","Tuna","Bread","Tomato","Potato","Oats"];
+const fallbackCommon = ["Chicken","Rice","Eggs","Cucumber","Yogurt","Tuna","Bread","Tomato","Potato","Oats"];
 
 function IngredientsPage() {
   const ingredients = useStore((s) => s.ingredients);
+  const { settings } = usePlatformSettings();
+  const common = settings.defaultIngredients.length
+    ? settings.defaultIngredients
+    : fallbackCommon;
   const [val, setVal] = useState("");
 
   function add(name: string) {

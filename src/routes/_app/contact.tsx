@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Mail, MapPin, Send } from "lucide-react";
+import { usePlatformSettings } from "@/lib/platform.firestore";
 
 export const Route = createFileRoute("/_app/contact")({
   head: () => ({ meta: [{ title: "Contact — Smart Healthy Plate" }] }),
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/_app/contact")({
 
 function Contact() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
+  const { settings } = usePlatformSettings();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,7 +49,7 @@ function Contact() {
         <div className="space-y-4">
           <Card className="rounded-3xl"><CardContent className="p-5">
             <div className="grid h-10 w-10 place-items-center rounded-2xl bg-primary/10 text-primary"><Mail className="h-5 w-5"/></div>
-            <div className="mt-3 font-medium">hello@smarthealthyplate.app</div>
+            <div className="mt-3 font-medium">{settings.contactEmail}</div>
             <div className="text-sm text-muted-foreground">We reply within 24 hours.</div>
           </CardContent></Card>
           <Card className="rounded-3xl"><CardContent className="p-5">

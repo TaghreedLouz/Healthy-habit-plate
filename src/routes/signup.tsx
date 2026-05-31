@@ -1,13 +1,19 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Leaf } from "lucide-react";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/PasswordInput";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { redirectIfAuthenticated } from "@/lib/auth-guard";
-import { syncProfileFromAuth } from "@/lib/store";
+import { auth } from "@/firebase.js";
+import { redirectIfAuthenticated, formatAuthError } from "@/lib/auth-guard";
+import { syncProfileFromAuth, markOnboardingComplete } from "@/lib/store";
+import { isAdminRole } from "@/lib/admin";
+import { syncUserRecord, getUserRecord } from "@/lib/users.firestore";
+import { getPlatformSettings } from "@/lib/platform.firestore";
+import { sendVerificationEmail } from "@/lib/auth-actions";
 
 export const Route = createFileRoute("/signup")({
   beforeLoad: redirectIfAuthenticated,
@@ -19,39 +25,72 @@ function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [signupEnabled, setSignupEnabled] = useState(true);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    getPlatformSettings()
+      .then((s) => setSignupEnabled(s.signupEnabled))
+      .finally(() => setChecking(false));
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!signupEnabled) return toast.error("Sign-ups are currently closed.");
     if (!form.email || !form.password) return toast.error("Fill all fields");
     if (form.password.length < 6) return toast.error("Password must be at least 6 characters");
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email: form.email.trim(),
-      password: form.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-        data: { name: form.name || "Friend" },
-      },
-    });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-
-    syncProfileFromAuth(form.email.trim(), form.name || "Friend");
-
-    if (!data.session) {
-      toast.success("Check your email to confirm your account, then log in.");
-      router.navigate({ to: "/login" });
-      return;
+    try {
+      const credential = await createUserWithEmailAndPassword(
+        auth,
+        form.email.trim(),
+        form.password,
+      );
+      const name = form.name || "Friend";
+      if (name) {
+        await updateProfile(credential.user, { displayName: name });
+      }
+      syncProfileFromAuth(form.email.trim(), name);
+      await syncUserRecord(credential.user, name);
+      const record = await getUserRecord(credential.user.uid);
+      if (isAdminRole(record?.role)) {
+        markOnboardingComplete(form.email.trim());
+      } else {
+        try {
+          await sendVerificationEmail(credential.user);
+        } catch {
+          /* verification email is optional */
+        }
+      }
+      toast.success("Welcome! Let's set up your plan.");
+      await router.navigate({ to: "/onboarding" });
+    } catch (error) {
+      toast.error(formatAuthError(error));
+    } finally {
+      setLoading(false);
     }
-    toast.success("Welcome! Let's set up your plan.");
-    router.navigate({ to: "/onboarding" });
+  }
+
+  if (checking) return null;
+
+  if (!signupEnabled) {
+    return (
+      <AuthFrame title="Sign-ups closed" subtitle="New registrations are temporarily disabled.">
+        <p className="mb-4 text-sm text-muted-foreground">
+          Please check back later or contact us if you need access.
+        </p>
+        <Link to="/login">
+          <Button className="w-full rounded-full" size="lg">Back to log in</Button>
+        </Link>
+      </AuthFrame>
+    );
   }
 
   return <AuthFrame title="Create your account" subtitle="Start your healthier week today.">
     <form onSubmit={submit} className="space-y-4">
       <div><Label>Name</Label><Input value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} placeholder="Sara"/></div>
       <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></div>
-      <div><Label>Password</Label><Input type="password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})} placeholder="••••••••"/></div>
+      <div><Label>Password</Label><PasswordInput autoComplete="new-password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})} placeholder="Your password"/></div>
       <Button type="submit" disabled={loading} className="w-full rounded-full" size="lg">
         {loading ? "Creating…" : "Create account"}
       </Button>

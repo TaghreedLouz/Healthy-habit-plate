@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { AuthFrame } from "./signup";
-import { supabase } from "@/integrations/supabase/client";
-import { redirectIfAuthenticated } from "@/lib/auth-guard";
+import { requestPasswordReset } from "@/lib/auth-actions";
+import { redirectIfAuthenticated, formatAuthError } from "@/lib/auth-guard";
 
 export const Route = createFileRoute("/forgot-password")({
   beforeLoad: redirectIfAuthenticated,
@@ -17,17 +17,34 @@ export const Route = createFileRoute("/forgot-password")({
 function Forgot() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email) return toast.error("Enter your email");
+    if (!email.trim()) return toast.error("Enter your email");
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Check your email for a reset link.");
+    try {
+      await requestPasswordReset(email);
+      setSent(true);
+      toast.success("Check your email for a reset link.");
+    } catch (error) {
+      toast.error(formatAuthError(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <AuthFrame title="Check your email" subtitle={`We sent a reset link to ${email.trim()}.`}>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Click the link in the email to choose a new password. If you don't see it, check your spam folder.
+        </p>
+        <Link to="/login">
+          <Button className="w-full rounded-full" size="lg">Back to log in</Button>
+        </Link>
+      </AuthFrame>
+    );
   }
 
   return (

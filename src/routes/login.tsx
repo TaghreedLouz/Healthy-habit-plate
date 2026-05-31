@@ -1,13 +1,17 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/PasswordInput";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { AuthFrame } from "./signup";
-import { supabase } from "@/integrations/supabase/client";
-import { redirectIfAuthenticated } from "@/lib/auth-guard";
-import { store, syncProfileFromAuth } from "@/lib/store";
+import { auth } from "@/firebase.js";
+import { redirectIfAuthenticated, formatAuthError } from "@/lib/auth-guard";
+import { syncProfileFromAuth, markOnboardingComplete, hasCompletedOnboarding } from "@/lib/store";
+import { isAdminRole } from "@/lib/admin";
+import { applyUserAccessFlags, syncUserRecord, getUserRecord } from "@/lib/users.firestore";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: redirectIfAuthenticated,
@@ -24,27 +28,43 @@ function LoginPage() {
     e.preventDefault();
     if (!form.email || !form.password) return toast.error("Enter your email and password");
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: form.email.trim(),
-      password: form.password,
-    });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-
-    const email = data.user?.email ?? form.email.trim();
-    const name = (data.user?.user_metadata?.name as string | undefined) ?? undefined;
-    syncProfileFromAuth(email, name);
-
-    toast.success("Welcome back!");
-    const onboarded = store.get().user?.onboarded;
-    router.navigate({ to: onboarded ? "/dashboard" : "/onboarding" });
+    try {
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        form.email.trim(),
+        form.password,
+      );
+      const email = credential.user.email ?? form.email.trim();
+      const access = await applyUserAccessFlags(credential.user);
+      if (!access) {
+        await firebaseSignOut(auth);
+        toast.error("This account has been disabled. Contact support.");
+        return;
+      }
+      syncProfileFromAuth(email, credential.user.displayName ?? undefined);
+      await syncUserRecord(credential.user);
+      const record = await getUserRecord(credential.user.uid);
+      if (isAdminRole(record?.role)) {
+        markOnboardingComplete(email);
+      }
+      toast.success("Welcome back!");
+      const destination =
+        isAdminRole(record?.role) || hasCompletedOnboarding(email)
+          ? "/dashboard"
+          : "/onboarding";
+      await router.navigate({ to: destination });
+    } catch (error) {
+      toast.error(formatAuthError(error));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <AuthFrame title="Welcome back" subtitle="Log in to your healthy plate.">
       <form onSubmit={submit} className="space-y-4">
         <div><Label>Email</Label><Input type="email" autoComplete="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})}/></div>
-        <div><Label>Password</Label><Input type="password" autoComplete="current-password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/></div>
+        <div><Label>Password</Label><PasswordInput autoComplete="current-password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/></div>
         <div className="flex justify-end">
           <Link to="/forgot-password" className="text-sm text-muted-foreground hover:text-primary">Forgot password?</Link>
         </div>

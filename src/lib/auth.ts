@@ -1,66 +1,56 @@
 import { useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { onAuthStateChanged, signOut as firebaseSignOut, type User } from "firebase/auth";
+import { auth } from "@/firebase.js";
+import { isAdminRole } from "@/lib/admin";
+import { syncUserRecord, applyUserAccessFlags, getUserRecord } from "@/lib/users.firestore";
 
 export interface AuthState {
-  session: Session | null;
-  user: Session["user"] | null;
-  isAdmin: boolean;
+  user: User | null;
   loading: boolean;
-}
-
-export async function fetchUserIsAdmin(userId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-  if (error) return false;
-  return !!data?.some((r) => r.role === "admin");
+  isAdmin: boolean;
 }
 
 export function useAuth(): AuthState {
-  const [session, setSession] = useState<Session | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    let active = true;
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      let admin = false;
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      if (!active) return;
-      setSession(s);
-      if (s?.user) {
-        setTimeout(() => fetchRole(s.user.id), 0);
-      } else {
-        setIsAdmin(false);
+      if (firebaseUser) {
+        try {
+          await syncUserRecord(firebaseUser);
+          const allowed = await applyUserAccessFlags(firebaseUser);
+          if (!allowed) {
+            await firebaseSignOut(auth);
+            setUser(null);
+            setIsAdmin(false);
+            setLoading(false);
+            return;
+          }
+          const record = await getUserRecord(firebaseUser.uid);
+          admin = isAdminRole(record?.role);
+        } catch {
+          /* Firestore rules may block until configured */
+        }
       }
-    });
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setSession(data.session);
-      if (data.session?.user) {
-        fetchRole(data.session.user.id).finally(() => active && setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
-
-    async function fetchRole(userId: string) {
-      const admin = await fetchUserIsAdmin(userId);
-      if (!active) return;
+      setUser(firebaseUser);
       setIsAdmin(admin);
-    }
-
-    return () => {
-      active = false;
-      sub.subscription.unsubscribe();
-    };
+      setLoading(false);
+    });
+    return unsub;
   }, []);
 
-  return { session, user: session?.user ?? null, isAdmin, loading };
+  return {
+    user,
+    loading,
+    isAdmin,
+  };
 }
 
 export async function signOut() {
-  await supabase.auth.signOut();
+  await firebaseSignOut(auth);
 }
